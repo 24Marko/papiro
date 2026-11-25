@@ -252,6 +252,9 @@ const FR = {
   '{n} document': '{n} document', '{n} documents': '{n} documents',
   '{n} document · total {amount}': '{n} document · total {amount}', '{n} documents · total {amount}': '{n} documents · total {amount}',
   'Sort': 'Trier', 'Change view (V)': 'Changer de vue (V)',
+  'Subfolders': 'Sous-dossiers', 'Also show the documents in its subfolders': 'Afficher aussi les documents de ses sous-dossiers',
+  'No documents directly in this folder': 'Aucun document directement dans ce dossier',
+  'Turn on “Subfolders” to also see the documents in its subfolders.': 'Activez « Sous-dossiers » pour voir aussi les documents de ses sous-dossiers.',
   // detail
   'Couldn’t show page {n}': 'Impossible d’afficher la page {n}',
   'The extracted text is still available in the Text tab. If the problem continues, an admin can check it in Settings → Health.': 'Le texte extrait reste disponible dans l’onglet Texte. Si le problème persiste, un administrateur peut le vérifier dans Paramètres → Santé.',
