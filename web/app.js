@@ -1,12 +1,18 @@
 import { html, render, useState, useEffect, useRef, useMemo } from './preact.js';
 
 // ───────────── i18n ─────────────
-// English is the source language; ES maps each English string to its Spanish translation.
-// A `word|` prefix gives context when one English string needs two Spanish ones; it's stripped in English.
-const LANG = ['en', 'es'].includes(localStorage.lang) ? localStorage.lang
-  : [...(navigator.languages || [navigator.language])].some((l) => /^es/i.test(l)) ? 'es' : 'en';
+// English is the source language; every other language is a dictionary keyed by the English text (ES, FR).
+// A `word|` prefix gives context when one English string needs two translations; it's stripped in English.
+// Adding a language: list it in LANGS, write its dictionary and its SERVER_ list, and register both in TR and SERVER.
+const LANGS = { en: 'English', es: 'Español', fr: 'Français' };
+// The saved choice, else the first translated language the browser lists (English is only the fallback).
+const LANG_IDS = Object.keys(LANGS);
+const LANG = LANG_IDS.includes(localStorage.lang) ? localStorage.lang
+  : [...(navigator.languages || [navigator.language])].map((l) => l.slice(0, 2).toLowerCase()).find((l) => l !== 'en' && LANG_IDS.includes(l)) || 'en';
 document.documentElement.lang = LANG;
-const LOCALE = LANG === 'es' ? 'es-MX' : /^en/i.test(navigator.language) ? navigator.language : 'en-US';
+// Dates and numbers: Spanish is formatted for Mexico; otherwise the browser's regional variant when it matches.
+const LOCALE = LANG === 'es' ? 'es-MX'
+  : navigator.language?.toLowerCase().startsWith(LANG) ? navigator.language : { en: 'en-US', fr: 'fr-FR' }[LANG];
 const ES = {
   // dates, network, uploads
   'Overdue': 'Vencido', 'Due today': 'Vence hoy', 'Due in {n} day': 'Vence en {n} día', 'Due in {n} days': 'Vence en {n} días',
@@ -181,22 +187,203 @@ const ES = {
   'Drop to add to Papiro': 'Suelta para añadir a Papiro', 'Drop to add to “{name}”': 'Suelta para añadir a «{name}»',
   'PDF, images, Word, Excel, PowerPoint, text': 'PDF, imágenes, Word, Excel, PowerPoint, texto',
 };
+// French uses no-break spaces inside « » and before : ; ? ! so they never wrap onto a line of their own.
+const FR = {
+  // dates, network, uploads
+  'Overdue': 'Expiré', 'Due today': 'Expire aujourd’hui', 'Due in {n} day': 'Expire dans {n} jour', 'Due in {n} days': 'Expire dans {n} jours',
+  'The upload was cut off before it finished. Please try again.': 'L’import a été interrompu avant la fin. Veuillez réessayer.',
+  'No connection to Papiro': 'Pas de connexion à Papiro',
+  '{file} was already in the archive': '{file} était déjà dans l’archive',
+  'Your user is read-only': 'Votre compte est en lecture seule',
+  'document': 'document',
+  'Uploading {name}…': 'Import de {name}…',
+  'Uploading {name} to “{folder}”…': 'Import de {name} dans « {folder} »…',
+  'Uploading {n} files…': 'Import de {n} fichiers…',
+  'Uploading {n} files to “{folder}”…': 'Import de {n} fichiers dans « {folder} »…',
+  'The browser couldn’t read “{name}”. Try the Upload button or copy the file to another folder.': 'Le navigateur n’a pas pu lire « {name} ». Essayez le bouton Importer ou copiez le fichier dans un autre dossier.',
+  // folders
+  'New folder': 'Nouveau dossier', 'New folder in “{name}”': 'Nouveau dossier dans « {name} »', 'Folder name': 'Nom du dossier', 'Create': 'Créer',
+  'Rename': 'Renommer', 'Save': 'Enregistrer',
+  'Delete the folder “{name}”?': 'Supprimer le dossier « {name} » ?',
+  'Its documents aren’t deleted: they move to “{name}”.': 'Ses documents ne sont pas supprimés : ils sont déplacés dans « {name} ».',
+  'Its documents aren’t deleted: they’re left without a folder.': 'Ses documents ne sont pas supprimés : ils se retrouvent sans dossier.',
+  'Its subfolders are deleted too.': 'Ses sous-dossiers sont également supprimés.',
+  'Delete folder': 'Supprimer le dossier', 'Folder deleted': 'Dossier supprimé', 'New subfolder': 'Nouveau sous-dossier',
+  'Moved to “{name}”': 'Déplacé dans « {name} »', 'Removed from its folder': 'Retiré de son dossier',
+  'Folder options': 'Options du dossier', 'Collapse': 'Replier', 'Expand': 'Déplier',
+  // pickers, dialogs
+  'Remove': 'Retirer', 'Search or create…': 'Rechercher ou créer…', 'Search…': 'Rechercher…', 'Create “{name}”': 'Créer « {name} »', 'No results': 'Aucun résultat',
+  'Search or create a folder…': 'Rechercher ou créer un dossier…', 'No folder': 'Aucun dossier', 'Create folder “{name}”': 'Créer le dossier « {name} »',
+  'No folders yet: type a name to create the first one': 'Aucun dossier pour l’instant : saisissez un nom pour créer le premier',
+  'Cancel': 'Annuler', 'OK': 'OK',
+  // sign-in
+  'Create your admin account': 'Créez votre compte administrateur', 'Sign in': 'Connexion',
+  'This is the first time this installation has been opened. This account will have full control.': 'C’est la première ouverture de cette installation. Ce compte aura un contrôle total.',
+  'Username': 'Nom d’utilisateur', 'Password': 'Mot de passe', 'Create account': 'Créer le compte', 'Log in': 'Se connecter',
+  // sidebar, tab bar
+  'Close': 'Fermer', 'Upload documents': 'Importer des documents', 'Upload documents (U)': 'Importer des documents (U)',
+  'Inbox': 'Boîte de réception', 'short|Inbox': 'Réception', 'All documents': 'Tous les documents', 'Due dates': 'Échéances', 'Trash': 'Corbeille',
+  'Folders': 'Dossiers', 'Create your first folder': 'Créez votre premier dossier', 'No folders yet': 'Aucun dossier pour l’instant',
+  'Folder': 'Dossier', 'Tag': 'Étiquette', 'Tags': 'Étiquettes', 'Correspondent': 'Correspondant', 'Correspondents': 'Correspondants', 'Type': 'Type', 'Types': 'Types',
+  'Processing {n}…': 'Traitement de {n}…', 'Activity': 'Activité', 'Failed jobs': 'Tâches en échec', 'Install Papiro': 'Installer Papiro',
+  'Settings': 'Paramètres', 'Light mode': 'Mode clair', 'Dark mode': 'Mode sombre', 'Archive': 'Archives', 'Add documents': 'Ajouter des documents', 'More': 'Plus',
+  'Add to Papiro': 'Ajouter à Papiro', 'Add to “{name}”': 'Ajouter à « {name} »',
+  'Take a photo': 'Prendre une photo', 'Photograph a paper document; Papiro extracts the text.': 'Photographiez un document papier ; Papiro en extrait le texte.',
+  'Choose files': 'Choisir des fichiers', 'PDF, photos, Word, Excel, PowerPoint or text.': 'PDF, photos, Word, Excel, PowerPoint ou texte.',
+  'With Papiro installed on your phone, you can also use “Share” from any other app.': 'Avec Papiro installé sur votre téléphone, vous pouvez aussi utiliser « Partager » depuis n’importe quelle autre application.',
+  // activity
+  'Queued': 'En attente', 'Extracting text…': 'Extraction du texte…', 'Done': 'Terminé', 'Already in the archive': 'Déjà dans l’archive', 'Failed': 'Échec',
+  'Nothing has been processed yet. Upload a file to get started.': 'Rien n’a encore été traité. Importez un fichier pour commencer.',
+  'open': 'ouvrir', 'Retrying…': 'Nouvelle tentative…', 'Retry': 'Réessayer', 'Dismiss': 'Ignorer', 'The file was kept': 'Le fichier a été conservé',
+  // list
+  'Has suggestions': 'Suggestions disponibles', '{n} page': '{n} page', '{n} pages': '{n} pages',
+  'Relevance': 'Pertinence', 'Due soonest': 'Échéance la plus proche', 'Newest': 'Plus récents', 'Oldest': 'Plus anciens', 'Recently added': 'Ajoutés récemment', 'Title A–Z': 'Titre A–Z',
+  'Nothing matches your search': 'Aucun résultat pour votre recherche', 'Try other words or remove a filter.': 'Essayez d’autres mots ou retirez un filtre.',
+  'This folder is empty': 'Ce dossier est vide',
+  'Anything you upload while here is saved in this folder. You can also move documents from their details.': 'Tout ce que vous importez ici est enregistré dans ce dossier. Vous pouvez aussi déplacer des documents depuis leur fiche.',
+  'There are no documents here yet.': 'Il n’y a pas encore de documents ici.',
+  'Inbox zero': 'Tout est trié', 'New items you haven’t reviewed yet will show up here.': 'Les nouveaux documents que vous n’avez pas encore vérifiés apparaîtront ici.',
+  'Nothing due soon': 'Aucune échéance proche', 'Documents that are overdue or due in the next 60 days show up here.': 'Les documents expirés ou qui expirent dans les 60 prochains jours apparaissent ici.',
+  'The trash is empty': 'La corbeille est vide', 'What you delete stays here until you restore it or delete it for good.': 'Ce que vous supprimez reste ici jusqu’à ce que vous le restauriez ou le supprimiez définitivement.',
+  'Your archive is empty': 'Votre archive est vide', 'Tap + to photograph a document or choose files.': 'Touchez + pour photographier un document ou choisir des fichiers.',
+  'Drag your PDFs, photos or Office documents here to get started.': 'Glissez ici vos PDF, photos ou documents Office pour commencer.',
+  'Search in {name}…': 'Rechercher dans {name}…', 'Search documents…': 'Rechercher des documents…', '{user}: settings': '{user} : paramètres',
+  'From': 'Du', 'To': 'Au', 'Clear': 'Effacer',
+  '{n} document': '{n} document', '{n} documents': '{n} documents',
+  '{n} document · total {amount}': '{n} document · total {amount}', '{n} documents · total {amount}': '{n} documents · total {amount}',
+  'Sort': 'Trier', 'Change view (V)': 'Changer de vue (V)',
+  // detail
+  'Couldn’t show page {n}': 'Impossible d’afficher la page {n}',
+  'The extracted text is still available in the Text tab. If the problem continues, an admin can check it in Settings → Health.': 'Le texte extrait reste disponible dans l’onglet Texte. Si le problème persiste, un administrateur peut le vérifier dans Paramètres → Santé.',
+  'Page {n}': 'Page {n}', 'That document no longer exists': 'Ce document n’existe plus', 'Back': 'Retour', 'Back (Esc)': 'Retour (Échap)',
+  'Classified with AI': 'Classé par IA', 'Delete permanently?': 'Supprimer définitivement ?',
+  '“{title}” and its files will be removed from the server. This can’t be undone.': '« {title} » et ses fichiers seront supprimés du serveur. Cette action est irréversible.',
+  'Delete forever': 'Supprimer pour de bon', 'Permanently deleted': 'Supprimé définitivement', 'Moved to trash': 'Placé dans la corbeille',
+  'What was clear has been applied; no suggestions left': 'Ce qui était évident a été appliqué ; plus aucune suggestion',
+  'No suggestions: there are no similar filed documents yet': 'Aucune suggestion : pas encore de documents similaires classés',
+  'Open the PDF in a new tab': 'Ouvrir le PDF dans un nouvel onglet', 'Download the original ({size})': 'Télécharger l’original ({size})',
+  'Download the PDF with text (OCR)': 'Télécharger le PDF avec texte (OCR)',
+  'Pages': 'Pages', 'Text': 'Texte', 'Details': 'Détails', 'Open or download': 'Ouvrir ou télécharger', 'Download': 'Télécharger',
+  'This document has no extracted text.': 'Ce document n’a pas de texte extrait.', 'Title (tap to edit)': 'Titre (touchez pour modifier)',
+  'In the trash': 'Dans la corbeille', 'Restored': 'Restauré', 'Restore': 'Restaurer', 'Mark as reviewed': 'Marquer comme vérifié',
+  'Suggestions': 'Suggestions', 'Accept all': 'Tout accepter', '{label} · {n} match': '{label} · {n} similaire', '{label} · {n} matches': '{label} · {n} similaires',
+  'Accept': 'Accepter', 'Based on similar documents you already filed. Computed on your server.': 'D’après des documents similaires que vous avez déjà classés. Calculé sur votre serveur.',
+  'Date': 'Date', 'Unassigned': 'Non attribué', 'None': 'Aucune', 'Add…': 'Ajouter…', 'Due date': 'Échéance', 'Amount': 'Montant', 'Archive no.': 'N° d’archive',
+  'Private': 'Privé', 'Only the uploader and admins can see it': 'Visible uniquement par la personne qui l’a importé et les administrateurs',
+  'Only you and admins': 'Vous et les administrateurs uniquement', 'Visible to all users': 'Visible par tous les utilisateurs',
+  'Assigned by similarity only: {list}.': 'Attribué uniquement par similarité : {list}.', '{label} “{name}”': '{label} « {name} »',
+  'Find suggestions': 'Chercher des suggestions', 'Summary': 'Résumé', 'Regenerate': 'Régénérer', 'Classify with AI': 'Classer avec l’IA', 'Fields': 'Champs',
+  'Notes': 'Notes', 'Delete note': 'Supprimer la note', 'Write a note…': 'Écrire une note…', 'No notes': 'Aucune note', 'Save note': 'Enregistrer la note',
+  'File': 'Fichier', 'Added {date}': 'Ajouté le {date}', 'SHA-256 of the original': 'SHA-256 de l’original',
+  'Delete permanently': 'Supprimer définitivement', 'Move to trash': 'Mettre à la corbeille',
+  // bulk edit
+  'Suggestions accepted on {n} document': 'Suggestions acceptées sur {n} document', 'Suggestions accepted on {n} documents': 'Suggestions acceptées sur {n} documents',
+  'Permanently delete {n} document?': 'Supprimer définitivement {n} document ?', 'Permanently delete {n} documents?': 'Supprimer définitivement {n} documents ?',
+  'They’ll be removed from the server along with their files. This can’t be undone.': 'Ils seront supprimés du serveur avec leurs fichiers. Cette action est irréversible.',
+  'Documents permanently deleted': 'Documents supprimés définitivement',
+  '{n} document selected': '{n} sélectionné', '{n} documents selected': '{n} sélectionnés',
+  'Documents restored': 'Documents restaurés', 'Accept suggestions': 'Accepter les suggestions', 'Move': 'Déplacer', 'Add tag': 'Étiqueter',
+  'Tag “{name}” added': 'Étiquette « {name} » ajoutée', 'Correspondent: {name}': 'Correspondant : {name}', 'Type: {name}': 'Type : {name}',
+  'Documents marked as reviewed': 'Documents marqués comme vérifiés', 'Reviewed': 'Vérifié', 'Documents moved to trash': 'Documents placés dans la corbeille',
+  'Clear selection (Esc)': 'Désélectionner (Échap)',
+  // command palette
+  'Go to the inbox': 'Aller à la boîte de réception', 'Go to all documents': 'Aller à tous les documents', 'Go to the trash': 'Aller à la corbeille', 'Go to due dates': 'Aller aux échéances',
+  'Switch to light mode': 'Passer en mode clair', 'Switch to dark mode': 'Passer en mode sombre',
+  'API tokens and MCP': 'Jetons d’API et MCP', 'Archive health': 'Santé de l’archive', 'API documentation': 'Documentation de l’API',
+  'Keyboard shortcuts': 'Raccourcis clavier', 'Language': 'Langue', 'Language: {name}': 'Langue : {name}', 'Sign out': 'Se déconnecter',
+  'Folder: {name}': 'Dossier : {name}', 'Tag: {name}': 'Étiquette : {name}',
+  'Search for a document or type an action…': 'Cherchez un document ou saisissez une action…', 'No matches': 'Aucune correspondance',
+  // settings: labels
+  'No rule': 'Aucune', 'Any word': 'N’importe quel mot', 'All words': 'Tous les mots', 'Exact phrase': 'Expression exacte', 'Regular expression': 'Expression régulière',
+  'New name…': 'Nouveau nom…', 'Add': 'Ajouter', 'Name': 'Nom', 'Assign if the text contains': 'Attribuer si le texte contient', 'Rule': 'Règle',
+  'Added to every new document': 'Ajoutée à chaque nouveau document', 'e.g. ACME electricity': 'ex. : EDF électricité',
+  'Delete': 'Supprimer', 'Delete “{name}”?': 'Supprimer « {name} » ?', 'The documents are kept; they only lose this assignment.': 'Les documents sont conservés ; ils perdent seulement cette attribution.',
+  'Tags marked as “Inbox” are added automatically to every new document; remove them once you’ve reviewed it.': 'Les étiquettes marquées « Réception » sont ajoutées automatiquement à chaque nouveau document ; retirez-les une fois le document vérifié.',
+  'Who issues or sends the document: companies, banks, agencies, people.': 'Qui émet ou envoie le document : entreprises, banques, administrations, particuliers.',
+  'Document types': 'Types de document', 'Invoice, contract, receipt, policy… Rules assign the type on ingestion.': 'Facture, contrat, reçu, police d’assurance… Les règles attribuent le type à l’ingestion.',
+  // settings: tokens, webhooks
+  'ppr_YOUR_TOKEN': 'ppr_VOTRE_JETON',
+  'A token gives scripts, automations or AI assistants access to your archive. It’s shown only once; the server stores only a hash of it.': 'Un jeton donne accès à votre archive à des scripts, des automatisations ou des assistants IA. Il n’est affiché qu’une fois ; le serveur n’en conserve qu’une empreinte (hash).',
+  'What is it for? (e.g. n8n, Claude)': 'À quoi sert-il ? (ex. : n8n, Claude)', 'Read-only': 'Lecture seule',
+  'Never expires': 'N’expire jamais', 'Expires in {n} days': 'Expire dans {n} jours', 'Expires in 1 year': 'Expire dans 1 an', 'Create token': 'Créer le jeton',
+  'Copy your token now; it won’t be shown again:': 'Copiez votre jeton maintenant ; il ne sera plus affiché :',
+  'Access': 'Accès', 'Expires': 'Expiration', 'Last used': 'Dernière utilisation', 'Full': 'Complet', 'Never': 'Jamais', 'Token revoked': 'Jeton révoqué', 'Revoke': 'Révoquer',
+  'Connect an AI (MCP)': 'Connecter une IA (MCP)',
+  'Papiro includes an MCP server so an assistant can search, read, upload and tag documents. With a read-only token, it can only search and read.': 'Papiro inclut un serveur MCP pour qu’un assistant puisse rechercher, lire, importer et étiqueter des documents. Avec un jeton en lecture seule, il peut seulement rechercher et lire.',
+  'Or through the REST API:': 'Ou via l’API REST :', 'invoice': 'facture',
+  'Webhook created': 'Webhook créé',
+  'Papiro sends an HTTP POST when a document is created, changed or deleted. With a secret, each delivery is signed (X-Papiro-Signature header, HMAC-SHA256).': 'Papiro envoie un HTTP POST quand un document est créé, modifié ou supprimé. Avec un secret, chaque envoi est signé (en-tête X-Papiro-Signature, HMAC-SHA256).',
+  'https://your-server/webhook': 'https://votre-serveur/webhook', 'All events': 'Tous les événements', 'New documents only': 'Nouveaux documents uniquement', 'New and changed': 'Nouveaux et modifiés',
+  'Signing secret (optional)': 'Secret de signature (facultatif)', 'Events': 'Événements', 'Last delivery': 'Dernier envoi', 'signed': 'signé', 'all': 'tous',
+  'Response: {status}': 'Réponse : {status}', 'Test': 'Tester',
+  // settings: account
+  'Admin': 'Administrateur', 'everything, including permanent deletion and managing users': 'tout, y compris la suppression définitive et la gestion des utilisateurs',
+  'Editor': 'Éditeur', 'uploads and edits; can’t delete permanently': 'importe et modifie ; ne peut pas supprimer définitivement',
+  'Viewer': 'Lecteur', 'only searches, reads and downloads': 'recherche, lit et télécharge uniquement',
+  'Password updated': 'Mot de passe mis à jour', 'User created': 'Utilisateur créé', 'New password for {user}': 'Nouveau mot de passe pour {user}',
+  'At least 8 characters. Their open sessions will be signed out.': 'Au moins 8 caractères. Ses sessions ouvertes seront fermées.',
+  'Reset': 'Réinitialiser', 'Password reset': 'Mot de passe réinitialisé', 'Account': 'Compte', 'Signed in as {user} ({role}).': 'Connecté en tant que {user} ({role}).',
+  'Current password': 'Mot de passe actuel', 'New (min. 8)': 'Nouveau (min. 8)', 'Change': 'Modifier', 'Users': 'Utilisateurs',
+  'A document marked as private can only be seen by its uploader and admins.': 'Un document marqué comme privé n’est visible que par la personne qui l’a importé et les administrateurs.',
+  'Role updated': 'Rôle mis à jour', 'Reset password': 'Réinitialiser le mot de passe', 'Delete the user {user}?': 'Supprimer l’utilisateur {user} ?',
+  'Their documents are kept.': 'Ses documents sont conservés.', 'Delete user': 'Supprimer l’utilisateur',
+  // settings: health, audit, API
+  'Check finished': 'Vérification terminée', 'Health': 'Santé', 'Integrity': 'Intégrité', 'Check now': 'Vérifier maintenant',
+  'Papiro {version} · schema {schema} · OCR {langs}.': 'Papiro {version} · schéma {schema} · OCR {langs}.',
+  'Papiro {version} · schema {schema} · OCR {langs} with rotated-page correction.': 'Papiro {version} · schéma {schema} · OCR {langs} avec correction des pages pivotées.',
+  'The only document has its file and its SHA-256 fingerprint matches.': 'L’unique document a son fichier et son empreinte SHA-256 correspond.',
+  'All {n} documents have their file and their SHA-256 fingerprints match.': 'Les {n} documents ont leur fichier et leurs empreintes SHA-256 correspondent.',
+  '{n} document has problems.': '{n} document présente des problèmes.', '{n} documents have problems.': '{n} documents présentent des problèmes.',
+  'Last check: {date} ({secs} s) · database: {db} · search index: {index}': 'Dernière vérification : {date} ({secs} s) · base de données : {db} · index de recherche : {index}',
+  'damaged': 'endommagé', 'Not checked yet. It runs by itself every day; you can also start it now.': 'Pas encore vérifié. La vérification se lance d’elle-même chaque jour ; vous pouvez aussi la démarrer maintenant.',
+  'Backup': 'Sauvegarde', 'Automatic every {n} h.': 'Automatique toutes les {n} h.', 'turned off': 'désactivée',
+  'Automatic backup is {off}. Set {dir} to another volume or disk, or run {cmd} from your own scheduler.': 'La sauvegarde automatique est {off}. Définissez {dir} vers un autre volume ou disque, ou lancez {cmd} depuis votre propre planificateur.',
+  'Last attempt failed: {error}': 'La dernière tentative a échoué : {error}',
+  'Last backup: {date} · {n} document · {size} in {dest}': 'Dernière sauvegarde : {date} · {n} document · {size} dans {dest}',
+  'Last backup: {date} · {n} documents · {size} in {dest}': 'Dernière sauvegarde : {date} · {n} documents · {size} dans {dest}',
+  '{n} daily copy of the database': '{n} copie quotidienne de la base', '{n} daily copies of the database': '{n} copies quotidiennes de la base',
+  'Ingestion': 'Ingestion',
+  '{queued} queued · {failed} failed · {hooks} pending webhook deliveries.': '{queued} en attente · {failed} en échec · {hooks} envois de webhook en attente.',
+  '{queued} queued · {failed} failed (their files were kept: review them in Activity) · {hooks} pending webhook deliveries.': '{queued} en attente · {failed} en échec (leurs fichiers ont été conservés : consultez-les dans Activité) · {hooks} envois de webhook en attente.',
+  'Documents with problems': 'Documents avec des problèmes',
+  'If you still have the file, upload it again: Papiro recognizes it’s the same one and replaces the damaged copy.': 'Si vous avez encore le fichier, importez-le à nouveau : Papiro reconnaît qu’il s’agit du même et remplace la copie endommagée.',
+  'Audit log': 'Journal d’audit', 'Who did what and from where: sign-ins, uploads, edits, deletions and admin changes.': 'Qui a fait quoi et d’où : connexions, imports, modifications, suppressions et changements d’administration.',
+  'When': 'Quand', 'Who': 'Qui', 'What': 'Quoi', 'Target': 'Cible',
+  'other': 'autres', 'OpenAPI 3.1 spec:': 'Spécification OpenAPI 3.1 :', 'required': 'obligatoire', 'Body': 'Corps', 'Responses': 'Réponses', 'Example': 'Exemple',
+  'Tokens & MCP': 'Jetons et MCP',
+  // keyboard help
+  'Search': 'Rechercher', 'Command palette': 'Palette de commandes', 'Next document': 'Document suivant', 'Previous document': 'Document précédent',
+  'Open preview': 'Ouvrir l’aperçu', 'Close / clear selection': 'Fermer / désélectionner', 'Select': 'Sélectionner', 'Shift + click': 'Maj + clic',
+  'Select range': 'Sélectionner une plage', 'Select all': 'Tout sélectionner', 'Move to a folder': 'Déplacer dans un dossier', '#  ·  Del': '#  ·  Suppr',
+  'List / grid': 'Liste / grille', 'Light / dark mode': 'Mode clair / sombre', 'G then I · A · T': 'G puis I · A · T', 'Inbox · All · Trash': 'Réception · Tous · Corbeille',
+  'This help': 'Cette aide', 'You can do everything without leaving the keyboard.': 'Tout se fait sans quitter le clavier.', 'Marked as reviewed': 'Marqué comme vérifié',
+  // app shell
+  'Your documents are on your server: you need a connection to see them. It retries by itself as soon as it’s back.': 'Vos documents sont sur votre serveur : une connexion est nécessaire pour les voir. Nouvelle tentative automatique dès son retour.',
+  'Offline: you’re seeing what was last loaded': 'Hors ligne : vous voyez le dernier contenu chargé',
+  'Drop to add to Papiro': 'Déposez pour ajouter à Papiro', 'Drop to add to “{name}”': 'Déposez pour ajouter à « {name} »',
+  'PDF, images, Word, Excel, PowerPoint, text': 'PDF, images, Word, Excel, PowerPoint, texte',
+};
+const TR = { es: ES, fr: FR }[LANG] || {};
 /** Translates `s` and fills `{name}` placeholders; if a value is a vnode, returns an array for html``. */
 function t(s, vars) {
-  s = (LANG === 'es' && ES[s]) || s.replace(/^[a-z]+\|/, '');
+  s = TR[s] || s.replace(/^[a-z]+\|/, '');
   if (!vars) return s;
   const parts = s.split(/\{(\w+)\}/).map((p, i) => (i % 2 ? vars[p] ?? `{${p}}` : p));
   return parts.some((p) => p && typeof p === 'object') ? parts : parts.join('');
 }
-const tn = (n, one, other, vars) => t(n === 1 ? one : other, { n, ...vars });
+// The singular form follows the language's plural rules (French uses it for 0 too: « 0 document »).
+const PLURAL = new Intl.PluralRules(LOCALE);
+const tn = (n, one, other, vars) => t(PLURAL.select(n) === 'one' ? one : other, { n, ...vars });
 const setLang = (l) => { localStorage.lang = l; location.reload(); };
-// Server messages arrive in English: [englishPattern, spanish] pairs, `{}` marks a dynamic part (substituted in order).
+// Server messages arrive in English: [englishPattern, translation] pairs, `{}` marks a dynamic part (substituted in order).
 // Filled from the server's message list.
 const SERVER_ES = [["{} points to an internal address, which is not allowed (set PAPIRO_WEBHOOK_ALLOW_PRIVATE=true to allow it)","{} apunta a una dirección interna; no se permite (PAPIRO_WEBHOOK_ALLOW_PRIVATE=true para permitirlo)"],["this job cannot be retried (it did not fail, or its file no longer exists)","este trabajo no se puede reintentar (no falló o su archivo ya no existe)"],["a folder cannot be moved into itself or into a folder that does not exist","una carpeta no se puede mover dentro de sí misma, ni a una que no existe"],["this is the only administrator; make someone else an administrator first","es el único administrador; nombra otro antes"],["only the uploader or an administrator can change a document's privacy","solo quien subió el documento o un administrador puede cambiar su privacidad"],["a folder name must be 1 to 80 characters long and cannot contain \"/\"","el nombre de la carpeta debe tener entre 1 y 80 caracteres y no llevar «/»"],["this document's file is not on disk; check Settings → Health","el archivo de este documento no está en disco; revisa Ajustes → Salud"],["too many attempts from your connection; wait a few minutes","demasiados intentos desde tu conexión; espera unos minutos"],["the copy does not match the original (different SHA-256)","la copia no coincide con el original (SHA-256 distinto)"],["a folder with that name already exists here","ya hay una carpeta con ese nombre en ese lugar"],["the password must be at least 8 characters long","la contraseña debe tener al menos 8 caracteres"],["the model's response was truncated (max_tokens)","la respuesta del modelo quedó truncada (max_tokens)"],[".{} requires PAPIRO_GOTENBERG_URL to be converted",".{} requiere PAPIRO_GOTENBERG_URL para convertirse"],["only an administrator can delete permanently","solo un administrador puede borrar definitivamente"],["a read-only token cannot change the password","un token de solo lectura no puede cambiar la contraseña"],["a read-only token cannot create other tokens","un token de solo lectura no puede crear otros tokens"],["the URL must start with http:// or https://","la URL debe empezar con http:// o https://"],["the model declined to process this document","el modelo declinó procesar este documento"],["action must be accept, dismiss or refresh","action debe ser accept, dismiss o refresh"],["no LLM is configured (PAPIRO_LLM_API_KEY)","no hay LLM configurado (PAPIRO_LLM_API_KEY)"],["server busy; try again in a few seconds","servidor ocupado; intenta de nuevo en unos segundos"],["{} document(s) moved to the parent folder","{} documento(s) pasaron a la carpeta superior"],["the original does not match its SHA-256","el original no coincide con su SHA-256"],["a read-only token cannot revoke tokens","un token de solo lectura no puede revocar tokens"],["invalid role (admin, editor or viewer)","rol inválido (admin, editor o viewer)"],["the original is {} bytes but should be {}","el original mide {} bytes y deberían ser {}"],["permanently deleted from the console","borrado definitivo desde la consola"],["this installation already has users","la instalación ya tiene usuarios"],["the LLM did not return valid JSON: {}","el LLM no devolvió JSON válido: {}"],["the LLM response contains no text","respuesta del LLM sin texto"],["the parent folder does not exist","la carpeta superior no existe"],["you cannot delete your own user","no puedes borrar tu propio usuario"],["your user or token is read-only","tu usuario o token es de solo lectura"],["administrator account created","cuenta de administrador creada"],["could not copy the database: {}","no se pudo copiar la base: {}"],["the job is still in progress","el trabajo sigue en curso"],["unreadable LLM response ({}): {}","respuesta ilegible del LLM ({}): {}"],["document permanently deleted","documento borrado definitivamente"],["more than {} days in the trash","más de {} días en la papelera"],["the original file is missing","falta el archivo original"],["document classified with AI","documento clasificado con IA"],["that folder does not exist","esa carpeta no existe"],["expires must be YYYY-MM-DD","expires debe ser YYYY-MM-DD"],["created must be YYYY-MM-DD","created debe ser YYYY-MM-DD"],["wrong username or password","usuario o contraseña incorrectos"],["the archive PDF is missing","falta el PDF de archivo"],["could not render the page","no se pudo renderizar la página"],["the file no longer exists","el archivo ya no existe"],["the username is required","falta el nombre de usuario"],["duplicate of document #{}","duplicado del documento #{}"],["unsupported file type: {}","tipo de archivo no soportado: {}"],["document moved to trash","documento a la papelera"],["document uploaded (MCP)","documento subido (MCP)"],["administrator required","requiere administrador"],["correspondent deleted","borrado en corresponsales"],["document type deleted","borrado en tipos de documento"],["document edited (MCP)","documento editado (MCP)"],["missing \"file\" field","falta el campo «file»"],["could not resolve {}: {}","no se pudo resolver {}: {}"],["no LLM is configured","LLM no configurado"],["suggestions accepted","sugerencias aceptadas"],["failed job dismissed","trabajo fallido descartado"],["the URL has no host","URL sin host"],["no disk space left","no queda espacio en disco"],["origin not allowed","origen no permitido"],["\"{}\" already exists","ya existe «{}»"],["not authenticated","no autenticado"],["LLM unreachable: {}","LLM inalcanzable: {}"],["document uploaded","documento subido"],["document restored","documento restaurado"],["name is required","falta name"],["unknown action: {}","acción desconocida: {}"],["LLM responded {}: {}","LLM respondió {}: {}"],["could not run {}: {}","no se pudo ejecutar {}: {}"],["{}: timed out ({} s)","{}: tiempo agotado ({} s)"],["password changed","contraseña cambiada"],["document edited","documento editado"],["integrity check","verificación de integridad"],["webhook created","webhook creado"],["webhook deleted","webhook borrado"],["folder created","carpeta creada"],["folder deleted","carpeta borrada"],["password reset","contraseña restablecida"],["token created","token creado"],["token revoked","token revocado"],["trash emptied","papelera vaciada"],["bulk edit ({})","edición masiva ({})"],["user created","usuario creado"],["role changed","rol cambiado"],["user deleted","usuario borrado"],["login failed","inicio de sesión fallido"],["tag deleted","borrado en etiquetas"],["conflict: {}","conflicto: {}"],["no details","sin detalle"],["{} documents","{} documentos"],["not found","no encontrado"],["bulk edit","edición masiva"],["logged in","sesión iniciada"],["document {}","documento {}"],["{} problems","{} problemas"],["read-only","solo lectura"],["blocked: {}","bloqueado: {}"],["console","consola"],["unknown","desconocida"],["system","sistema"]];
-const SERVER_RE = SERVER_ES.map(([pat, es]) => [new RegExp(`^${pat.split('{}').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.+?)')}$`, 's'), es]);
+const SERVER_FR = [["{} points to an internal address, which is not allowed (set PAPIRO_WEBHOOK_ALLOW_PRIVATE=true to allow it)","{} pointe vers une adresse interne, ce qui n’est pas autorisé (PAPIRO_WEBHOOK_ALLOW_PRIVATE=true pour l’autoriser)"],["this job cannot be retried (it did not fail, or its file no longer exists)","cette tâche ne peut pas être relancée (elle n’a pas échoué, ou son fichier n’existe plus)"],["a folder cannot be moved into itself or into a folder that does not exist","un dossier ne peut être déplacé ni dans lui-même, ni dans un dossier qui n’existe pas"],["this is the only administrator; make someone else an administrator first","c’est le seul administrateur ; nommez d’abord un autre administrateur"],["only the uploader or an administrator can change a document's privacy","seuls la personne qui a importé le document et les administrateurs peuvent changer sa confidentialité"],["a folder name must be 1 to 80 characters long and cannot contain \"/\"","le nom d’un dossier doit faire de 1 à 80 caractères et ne pas contenir « / »"],["this document's file is not on disk; check Settings → Health","le fichier de ce document n’est pas sur le disque ; vérifiez Paramètres → Santé"],["too many attempts from your connection; wait a few minutes","trop de tentatives depuis votre connexion ; patientez quelques minutes"],["the copy does not match the original (different SHA-256)","la copie ne correspond pas à l’original (SHA-256 différent)"],["a folder with that name already exists here","un dossier portant ce nom existe déjà ici"],["the password must be at least 8 characters long","le mot de passe doit comporter au moins 8 caractères"],["the model's response was truncated (max_tokens)","la réponse du modèle a été tronquée (max_tokens)"],[".{} requires PAPIRO_GOTENBERG_URL to be converted",".{} nécessite PAPIRO_GOTENBERG_URL pour être converti"],["only an administrator can delete permanently","seul un administrateur peut supprimer définitivement"],["a read-only token cannot change the password","un jeton en lecture seule ne peut pas changer le mot de passe"],["a read-only token cannot create other tokens","un jeton en lecture seule ne peut pas créer d’autres jetons"],["the URL must start with http:// or https://","l’URL doit commencer par http:// ou https://"],["the model declined to process this document","le modèle a refusé de traiter ce document"],["action must be accept, dismiss or refresh","action doit valoir accept, dismiss ou refresh"],["no LLM is configured (PAPIRO_LLM_API_KEY)","aucun LLM n’est configuré (PAPIRO_LLM_API_KEY)"],["server busy; try again in a few seconds","serveur occupé ; réessayez dans quelques secondes"],["{} document(s) moved to the parent folder","{} document(s) déplacé(s) dans le dossier parent"],["the original does not match its SHA-256","l’original ne correspond pas à son SHA-256"],["a read-only token cannot revoke tokens","un jeton en lecture seule ne peut pas révoquer de jetons"],["invalid role (admin, editor or viewer)","rôle invalide (admin, editor ou viewer)"],["the original is {} bytes but should be {}","l’original fait {} octets au lieu de {}"],["permanently deleted from the console","supprimé définitivement depuis la console"],["this installation already has users","cette installation a déjà des utilisateurs"],["the LLM did not return valid JSON: {}","le LLM n’a pas renvoyé de JSON valide : {}"],["the LLM response contains no text","la réponse du LLM ne contient pas de texte"],["the parent folder does not exist","le dossier parent n’existe pas"],["you cannot delete your own user","vous ne pouvez pas supprimer votre propre compte"],["your user or token is read-only","votre compte ou votre jeton est en lecture seule"],["administrator account created","compte administrateur créé"],["could not copy the database: {}","impossible de copier la base de données : {}"],["the job is still in progress","la tâche est toujours en cours"],["unreadable LLM response ({}): {}","réponse du LLM illisible ({}) : {}"],["document permanently deleted","document supprimé définitivement"],["more than {} days in the trash","plus de {} jours dans la corbeille"],["the original file is missing","le fichier original est manquant"],["document classified with AI","document classé par IA"],["that folder does not exist","ce dossier n’existe pas"],["expires must be YYYY-MM-DD","expires doit être au format AAAA-MM-JJ"],["created must be YYYY-MM-DD","created doit être au format AAAA-MM-JJ"],["wrong username or password","nom d’utilisateur ou mot de passe incorrect"],["the archive PDF is missing","le PDF d’archive est manquant"],["could not render the page","impossible d’afficher la page"],["the file no longer exists","le fichier n’existe plus"],["the username is required","le nom d’utilisateur est obligatoire"],["duplicate of document #{}","doublon du document #{}"],["unsupported file type: {}","type de fichier non pris en charge : {}"],["document moved to trash","document placé dans la corbeille"],["document uploaded (MCP)","document importé (MCP)"],["administrator required","réservé aux administrateurs"],["correspondent deleted","correspondant supprimé"],["document type deleted","type de document supprimé"],["document edited (MCP)","document modifié (MCP)"],["missing \"file\" field","champ « file » manquant"],["could not resolve {}: {}","impossible de résoudre {} : {}"],["no LLM is configured","aucun LLM n’est configuré"],["suggestions accepted","suggestions acceptées"],["failed job dismissed","tâche en échec ignorée"],["the URL has no host","l’URL n’a pas d’hôte"],["no disk space left","plus d’espace disque"],["origin not allowed","origine non autorisée"],["\"{}\" already exists","« {} » existe déjà"],["not authenticated","non authentifié"],["LLM unreachable: {}","LLM injoignable : {}"],["document uploaded","document importé"],["document restored","document restauré"],["name is required","name est obligatoire"],["unknown action: {}","action inconnue : {}"],["LLM responded {}: {}","le LLM a répondu {} : {}"],["could not run {}: {}","impossible d’exécuter {} : {}"],["{}: timed out ({} s)","{} : délai dépassé ({} s)"],["password changed","mot de passe modifié"],["document edited","document modifié"],["integrity check","vérification d’intégrité"],["webhook created","webhook créé"],["webhook deleted","webhook supprimé"],["folder created","dossier créé"],["folder deleted","dossier supprimé"],["password reset","mot de passe réinitialisé"],["token created","jeton créé"],["token revoked","jeton révoqué"],["trash emptied","corbeille vidée"],["bulk edit ({})","modification groupée ({})"],["user created","utilisateur créé"],["role changed","rôle modifié"],["user deleted","utilisateur supprimé"],["login failed","échec de connexion"],["tag deleted","étiquette supprimée"],["conflict: {}","conflit : {}"],["no details","sans détail"],["{} documents","{} documents"],["not found","introuvable"],["bulk edit","modification groupée"],["logged in","connexion réussie"],["document {}","document {}"],["{} problems","{} problèmes"],["read-only","lecture seule"],["blocked: {}","bloqué : {}"],["console","console"],["unknown","inconnu"],["system","système"]];
+const SERVER = { es: SERVER_ES, fr: SERVER_FR }[LANG] || [];
+const SERVER_RE = SERVER.map(([pat, tr]) => [new RegExp(`^${pat.split('{}').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.+?)')}$`, 's'), tr]);
 function srv(m) {
-  if (LANG !== 'es' || typeof m !== 'string') return m;
-  for (const [re, es] of SERVER_RE) { const x = m.match(re); if (x) { let i = 1; return es.replace(/\{\}/g, () => x[i++] ?? ''); } }
+  if (typeof m !== 'string') return m;
+  for (const [re, tr] of SERVER_RE) { const x = m.match(re); if (x) { let i = 1; return tr.replace(/\{\}/g, () => x[i++] ?? ''); } }
   return m;
 }
 
@@ -867,7 +1054,7 @@ function Palette() {
     [t('Upload documents'), 'upload', () => pickFiles(), 'U'], [t('Go to the inbox'), 'inbox', () => nav({ ...HOME, view: 'inbox' }), 'G I'], [t('Go to all documents'), 'files', () => nav({ ...HOME, view: 'all' }), 'G A'],
     [t('Go to the trash'), 'trash', () => nav({ ...HOME, view: 'trash' }), 'G T'], [t('Go to due dates'), 'clock', () => nav({ ...HOME, view: 'expiring' })], ...(canWrite() ? [[t('New folder'), 'folder', () => newFolder(here()?.id), 'N']] : []), [isDark() ? t('Switch to light mode') : t('Switch to dark mode'), isDark() ? 'sun' : 'moon', () => setTheme(isDark() ? 'light' : 'dark'), 'D'],
     [t('Settings'), 'settings', () => store.set({ modal: 'settings' }), ','], [t('API tokens and MCP'), 'key', () => store.set({ modal: 'settings:tokens' })], ...(isAdmin() ? [[t('Archive health'), 'activity', () => store.set({ modal: 'settings:health' })]] : []), [t('API documentation'), 'code', () => store.set({ modal: 'settings:api' })],
-    [t('Keyboard shortcuts'), 'help', () => store.set({ modal: 'help' }), '?'], [t('Language: {name}', { name: LANG === 'es' ? 'English' : 'Español' }), 'globe', () => setLang(LANG === 'es' ? 'en' : 'es')], [t('Sign out'), 'logout', () => api('/auth/logout', { method: 'POST' }).then(() => location.reload())],
+    [t('Keyboard shortcuts'), 'help', () => store.set({ modal: 'help' }), '?'], ...Object.entries(LANGS).filter(([l]) => l !== LANG).map(([l, name]) => [t('Language: {name}', { name }), 'globe', () => setLang(l)]), [t('Sign out'), 'logout', () => api('/auth/logout', { method: 'POST' }).then(() => location.reload())],
     ...s.folders.map((f) => [t('Folder: {name}', { name: f.path.replaceAll('/', ' › ') }), 'folder', () => nav({ ...HOME, view: 'all', f: f.id })]),
     ...s.labels.tag.map((l) => [t('Tag: {name}', { name: l.name }), 'tag', () => nav({ tags: [l.id], doc: null })]),
     ...s.labels.correspondent.map((l) => [t('Correspondent: {name}', { name: l.name }), 'user', () => nav({ c: l.id, doc: null })]),
@@ -935,7 +1122,7 @@ function Webhooks() {
       <td class="row"><button class="btn ghost sm" onClick=${() => attempt(api(`/webhooks/${w.id}/test`, { method: 'POST' })).then((r) => { r && toast(t('Response: {status}', { status: r.status }), r.status.startsWith('2') ? 'ok' : 'bad'); load(); })}>${t('Test')}</button>
         <button class="btn icon ghost sm" onClick=${() => attempt(api(`/webhooks/${w.id}`, { method: 'DELETE' })).then(load)}><${Icon} n="trash" /></button></td></tr>`)}</table>`;
 }
-const ROLES = [['admin', t('Admin'), t('everything, including permanent deletion and managing users')], ['editor', 'Editor', t('uploads and edits; can’t delete permanently')], ['viewer', t('Viewer'), t('only searches, reads and downloads')]];
+const ROLES = [['admin', t('Admin'), t('everything, including permanent deletion and managing users')], ['editor', t('Editor'), t('uploads and edits; can’t delete permanently')], ['viewer', t('Viewer'), t('only searches, reads and downloads')]];
 function Account() {
   const s = useStore(), [users, setUsers] = useState([]), [pw, setPw] = useState({ current: '', new: '' }), [nu, setNu] = useState({ username: '', password: '', role: 'editor' });
   const load = () => isAdmin() && api('/users').then(setUsers); useEffect(() => { load(); }, []);
@@ -945,7 +1132,7 @@ function Account() {
   return html`<h2>${t('Account')}</h2><p>${t('Signed in as {user} ({role}).', { user: html`<b>${s.user.username}</b>`, role: ROLES.find((r) => r[0] === s.user.role)?.[1] })} <a href="#" onClick=${(e) => { e.preventDefault(); api('/auth/logout', { method: 'POST' }).then(() => location.reload()); }}>${t('Sign out')}</a></p>
     <form class="row" style="flex-wrap:wrap" onSubmit=${change}><input class="input" style="flex:1;min-width:150px" type="password" placeholder=${t('Current password')} value=${pw.current} onInput=${(e) => setPw({ ...pw, current: e.target.value })} required />
       <input class="input" style="flex:1;min-width:150px" type="password" placeholder=${t('New (min. 8)')} minlength="8" value=${pw.new} onInput=${(e) => setPw({ ...pw, new: e.target.value })} required /><button class="btn">${t('Change')}</button></form>
-    <h2 style="margin-top:26px">${t('Language')}</h2><select class="input" style="width:auto" value=${LANG} onChange=${(e) => setLang(e.target.value)}><option value="en">English</option><option value="es">Español</option></select>
+    <h2 style="margin-top:26px">${t('Language')}</h2><select class="input" style="width:auto" value=${LANG} onChange=${(e) => setLang(e.target.value)}>${Object.entries(LANGS).map(([l, name]) => html`<option value=${l}>${name}</option>`)}</select>
     ${isAdmin() && html`<h2 style="margin-top:26px">${t('Users')}</h2><p>${ROLES.map(([, n, d]) => html`<b>${n}</b>: ${d}. `)}${t('A document marked as private can only be seen by its uploader and admins.')}</p>
       <form class="row" style="margin-bottom:12px;flex-wrap:wrap" onSubmit=${add}><input class="input" style="flex:1;min-width:120px" placeholder=${t('Username')} value=${nu.username} onInput=${(e) => setNu({ ...nu, username: e.target.value })} required />
         <input class="input" style="flex:1;min-width:120px" type="password" placeholder=${t('Password')} minlength="8" value=${nu.password} onInput=${(e) => setNu({ ...nu, password: e.target.value })} required />

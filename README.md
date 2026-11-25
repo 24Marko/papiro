@@ -15,7 +15,7 @@
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-f2b660">
   <a href="https://github.com/elpablazo/papiro/pkgs/container/papiro"><img alt="Docker image" src="https://img.shields.io/badge/ghcr.io-elpablazo%2Fpapiro-7aa7e8"></a>
   <img alt="amd64 and arm64" src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-b5ad9f">
-  <img alt="English and Spanish" src="https://img.shields.io/badge/UI-English%20%7C%20Espa%C3%B1ol-ea580c">
+  <img alt="English, Spanish and French" src="https://img.shields.io/badge/UI-English%20%7C%20Espa%C3%B1ol%20%7C%20Fran%C3%A7ais-ea580c">
 </p>
 
 <p align="center">
@@ -64,7 +64,7 @@ Same machine, same documents, one app at a time. Every number has a script and r
   <img src="docs/img/mobile.jpg" alt="Papiro on a phone: the archive, the due-dates view in dark mode, and a document with suggestions" width="820">
 </p>
 
-The interface speaks **English and Spanish** and picks yours from the browser (switch it in Settings → Account). More languages are a small, welcome PR: every string lives in one dictionary at the top of `web/app.js`.
+The interface speaks **English, Spanish and French** and picks yours from the browser (switch it in Settings → Account). More languages are a small, welcome PR: each one is a dictionary at the top of `web/app.js`, listed in `LANGS`.
 
 ## Quick start
 
@@ -153,7 +153,7 @@ Being honest is part of the pitch:
 - **Page cleaning and deskewing** before OCR. On a page skewed 4°, Paperless read 100 % of the words and Papiro 96.7 %; on a dim photo with a shadow, 62 % vs 53 %.
 - **Workflows** (triggers and actions), **mail rules**, **group permissions**, saved views, share links, barcodes and document splitting, MFA/SSO.
 - **A machine-learning classifier** trained on your archive. Papiro's local auto-filing is similarity-based and simpler.
-- **37 UI languages.** Papiro has two so far: English and Spanish.
+- **37 UI languages.** Papiro has three so far: English, Spanish and French.
 - **Years in production** and a big community. Papiro is young.
 
 ## Install on your phone
